@@ -184,6 +184,25 @@ async function startRoom(browser) {
 
     await page.exposeFunction('botBuildReply', buildReply);
 
+    // Injecter le hook WebRTC AVANT que la page crée ses connexions
+    await page.evaluateOnNewDocument(() => {
+      const hookedChannels = new WeakSet();
+      const origAEL = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, fn, opts) {
+        if (this instanceof RTCDataChannel && type === 'message' && typeof fn === 'function') {
+          if (!hookedChannels.has(this)) {
+            hookedChannels.add(this);
+            console.log('[LoveBot] ✓ DataChannel hooké (early)');
+          }
+          return origAEL.call(this, type, function(ev) {
+            if (window.__loveBotHandleChat) window.__loveBotHandleChat(ev.data);
+            return fn.call(this, ev);
+          }, opts);
+        }
+        return origAEL.call(this, type, fn, opts);
+      };
+    });
+
     await page.evaluate(() => {
       const seen = new Set();
 
@@ -258,22 +277,8 @@ async function startRoom(browser) {
       observer.observe(container, { childList: true, subtree: true });
       console.log('[LoveBot] DOM observer actif sur :', container.className || 'body');
 
-      // Hook RTCDataChannel
-      const hookedChannels = new WeakSet();
-      const origAEL = EventTarget.prototype.addEventListener;
-      EventTarget.prototype.addEventListener = function(type, fn, opts) {
-        if (this instanceof RTCDataChannel && type === 'message' && typeof fn === 'function') {
-          if (!hookedChannels.has(this)) {
-            hookedChannels.add(this);
-            console.log('[LoveBot] ✓ DataChannel hooké');
-          }
-          return origAEL.call(this, type, function(ev) {
-            handleChat(ev.data);
-            return fn.call(this, ev);
-          }, opts);
-        }
-        return origAEL.call(this, type, fn, opts);
-      };
+      // Exposer handleChat pour le hook early
+      window.__loveBotHandleChat = handleChat;
 
       console.log('[LoveBot] ✓ Injections complètes');
     });
