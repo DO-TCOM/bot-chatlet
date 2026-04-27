@@ -1,4 +1,3 @@
-
 FROM ghcr.io/puppeteer/puppeteer:22.0.0
 
 WORKDIR /app
