@@ -322,7 +322,17 @@ async function main() {
 
   browser.on('disconnected', async () => {
     console.log('[LoveBot] Browser crashé — redémarrage dans 15s');
-    setTimeout(main, 15000);
+    setTimeout(async () => {
+      const newBrowser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
+        args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu']
+      });
+      newBrowser.on('disconnected', () => {
+        console.log('[LoveBot] Browser crashé — redémarrage dans 15s');
+      });
+      await startRoom(newBrowser);
+    }, 15000);
   });
 
   await startRoom(browser);
