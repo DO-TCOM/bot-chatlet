@@ -1,9 +1,6 @@
 const puppeteer = require('puppeteer');
 
-const ROOMS = [
-  'https://chatlet.com/kids',
-  'https://chatlet.com/friends'
-];
+const ROOM = 'https://chatlet.com/friends';
 
 const hyperLove = [
   "SOULMATES DÉTECTÉS. C'est littéralement le destin.",
@@ -50,8 +47,8 @@ async function wait(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function startRoom(browser, url) {
-  console.log(`\n========== [LoveBot] Démarrage ${url} ==========`);
+async function startRoom(browser) {
+  console.log(`\n========== [LoveBot] Démarrage ${ROOM} ==========`);
   const page = await browser.newPage();
 
   await page.setUserAgent(
@@ -59,37 +56,32 @@ async function startRoom(browser, url) {
   );
 
   try {
-    console.log(`[LoveBot] Navigation vers ${url}...`);
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+    console.log(`[LoveBot] Navigation...`);
+    await page.goto(ROOM, { waitUntil: 'networkidle2', timeout: 45000 });
     console.log(`[LoveBot] ✓ Page chargée`);
 
-    // ── 0. Pseudo et couleur ──────────────────────────────
     await page.evaluate(() => {
       localStorage.setItem('displayName', 'Docteur Love');
       localStorage.setItem('profileColor', '#FF69B4');
     });
-    console.log(`[LoveBot] Rechargement...`);
     await page.reload({ waitUntil: 'networkidle2', timeout: 45000 });
     console.log(`[LoveBot] ✓ Pseudo défini`);
 
-    // ── 1. joinChat ───────────────────────────────────────
-    console.log(`[LoveBot] Attente joinChat...`);
     await page.waitForSelector('button.button.joinChat', { timeout: 20000 });
     await page.click('button.button.joinChat');
     console.log(`[LoveBot] ✓ joinChat cliqué`);
-    await wait(3000);
+    await wait(4000);
 
-    // ── 2. toggleChat ─────────────────────────────────────
-    console.log(`[LoveBot] Attente toggleChat...`);
-    await page.waitForSelector('button.button.toggleChat', { timeout: 20000 });
+    await page.waitForSelector('button.button.toggleChat', { timeout: 25000 });
     await page.click('button.button.toggleChat');
-    console.log(`[LoveBot] ✓ Panneau ouvert`);
+    console.log(`[LoveBot] ✓ Panneau chat ouvert`);
     await wait(2000);
 
-    // ── 3. Exposer buildReply ─────────────────────────────
+    const inputExists = await page.$('.input');
+    console.log(`[LoveBot] .input trouvé : ${!!inputExists}`);
+
     await page.exposeFunction('botBuildReply', buildReply);
 
-    // ── 4. Injecter la logique LoveBot ────────────────────
     await page.evaluate(() => {
       const seen = new Set();
 
@@ -108,14 +100,14 @@ async function startRoom(browser, url) {
         input.focus();
         input.value = text;
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 200));
-        ['keypress', 'keydown', 'keyup'].forEach(type => {
+        await new Promise(r => setTimeout(r, 300));
+        ['keydown', 'keypress', 'keyup'].forEach(type => {
           input.dispatchEvent(new KeyboardEvent(type, {
             key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
             bubbles: true, cancelable: true
           }));
         });
-        console.log('[LoveBot] ✅ Message envoyé !');
+        console.log('[LoveBot] ✅ Message envoyé :', text);
       }
 
       async function handleChat(data) {
@@ -129,12 +121,7 @@ async function startRoom(browser, url) {
         if (!text) return;
         text = text.trim();
 
-        if (
-          text.includes('!!!') || text.includes('% ...') ||
-          text.includes('💘') || text.includes('💕') ||
-          text.includes('💔') || text.includes('☠️')
-        ) return;
-
+        if (text.includes('💘') || text.includes('💕') || text.includes('💔') || text.includes('☠️')) return;
         if (!text.toLowerCase().startsWith('!love')) return;
 
         const key = text.toLowerCase();
@@ -143,11 +130,12 @@ async function startRoom(browser, url) {
         setTimeout(() => seen.delete(key), 5000);
 
         const names = parseNames(text);
-        if (!names) return;
+        if (!names) { console.log('[LoveBot] ❌ Noms non parsés :', text); return; }
 
         const [a, b] = names;
+        console.log('[LoveBot] 💘 Match :', a, '&', b);
         const reply = await window.botBuildReply(a, b);
-        setTimeout(() => sendMessage(reply), 600);
+        setTimeout(() => sendMessage(reply), 800);
       }
 
       // Observer DOM
@@ -166,14 +154,17 @@ async function startRoom(browser, url) {
 
       const container = document.querySelector('.messages') || document.querySelector('.chat') || document.body;
       observer.observe(container, { childList: true, subtree: true });
-      console.log('[LoveBot] DOM observer actif');
+      console.log('[LoveBot] DOM observer actif sur :', container.className || 'body');
 
       // Hook RTCDataChannel
       const hookedChannels = new WeakSet();
       const origAEL = EventTarget.prototype.addEventListener;
       EventTarget.prototype.addEventListener = function(type, fn, opts) {
         if (this instanceof RTCDataChannel && type === 'message' && typeof fn === 'function') {
-          if (!hookedChannels.has(this)) { hookedChannels.add(this); }
+          if (!hookedChannels.has(this)) {
+            hookedChannels.add(this);
+            console.log('[LoveBot] ✓ DataChannel hooké');
+          }
           return origAEL.call(this, type, function(ev) {
             handleChat(ev.data);
             return fn.call(this, ev);
@@ -185,22 +176,23 @@ async function startRoom(browser, url) {
       console.log('[LoveBot] ✓ Injections complètes');
     });
 
-    console.log(`\n✅ [LoveBot] ACTIF sur ${url}\n`);
+    console.log(`\n✅ [LoveBot] ACTIF sur ${ROOM}\n`);
 
     page.on('close', () => {
-      console.log(`[LoveBot] Page fermée : ${url} — reconnexion dans 15s`);
-      setTimeout(() => startRoom(browser, url), 15000);
+      console.log(`[LoveBot] Page fermée — reconnexion dans 15s`);
+      setTimeout(() => startRoom(browser), 15000);
     });
 
     page.on('pageerror', err => {
-      console.log(`[LoveBot] Erreur page ${url} :`, err.message);
+      if (err.message.includes('RTCPeerConnection')) return;
+      console.log(`[LoveBot] Erreur page :`, err.message);
     });
 
   } catch (err) {
-    console.error(`[LoveBot] ❌ Erreur sur ${url} :`, err.message);
+    console.error(`[LoveBot] ❌ Erreur :`, err.message);
     await page.close().catch(() => {});
-    console.log(`[LoveBot] Retry ${url} dans 20s...`);
-    setTimeout(() => startRoom(browser, url), 20000);
+    console.log(`[LoveBot] Retry dans 20s...`);
+    setTimeout(() => startRoom(browser), 20000);
   }
 }
 
@@ -221,13 +213,7 @@ async function main() {
     setTimeout(main, 15000);
   });
 
-  // Lancer le premier salon
-  await startRoom(browser, ROOMS[0]);
-
-  // Attendre 60s puis lancer le second
-  console.log('\n[LoveBot] Attente 60s avant ouverture du second salon...\n');
-  await wait(60000);
-  await startRoom(browser, ROOMS[1]);
+  await startRoom(browser);
 }
 
 main();
