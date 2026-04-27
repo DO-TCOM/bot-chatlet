@@ -197,6 +197,9 @@ async function startRoom(browser) {
 }
 
 async function main() {
+  const http = require('http');
+  http.createServer((req, res) => res.end('ok')).listen(process.env.PORT || 3000);
+  console.log(`[LoveBot] HTTP sur port ${process.env.PORT || 3000}`);
   const browser = await puppeteer.launch({
     headless: 'new',
     executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
