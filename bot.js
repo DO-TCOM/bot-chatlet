@@ -300,8 +300,13 @@ async function startRoom(browser) {
 
 // Serveur HTTP minimal pour Render — lancé une seule fois
 const http = require('http');
-http.createServer((req, res) => res.end('ok')).listen(process.env.PORT || 3000);
-console.log(`[LoveBot] HTTP sur port ${process.env.PORT || 3000}`);
+const server = http.createServer((req, res) => res.end('ok'));
+server.on('error', (err) => {
+  if (err.code !== 'EADDRINUSE') console.error('[LoveBot] HTTP error:', err.message);
+});
+server.listen(process.env.PORT || 3000, () => {
+  console.log(`[LoveBot] HTTP sur port ${process.env.PORT || 3000}`);
+});
 
 async function main() {
   const browser = await puppeteer.launch({
