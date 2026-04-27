@@ -254,7 +254,7 @@ async function startRoom(browser, url) {
 
 async function launchBrowser() {
   return puppeteer.launch({
-    headless: false, // ← Change en 'new' pour Render, false pour tester localement
+    headless: 'new', // ← 'new' pour Render (production), false pour tester localement
     executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
     args: [
       '--no-sandbox',
