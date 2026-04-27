@@ -298,12 +298,12 @@ async function startRoom(browser) {
   }
 }
 
-async function main() {
-  // Serveur HTTP minimal pour Render
-  const http = require('http');
-  http.createServer((req, res) => res.end('ok')).listen(process.env.PORT || 3000);
-  console.log(`[LoveBot] HTTP sur port ${process.env.PORT || 3000}`);
+// Serveur HTTP minimal pour Render — lancé une seule fois
+const http = require('http');
+http.createServer((req, res) => res.end('ok')).listen(process.env.PORT || 3000);
+console.log(`[LoveBot] HTTP sur port ${process.env.PORT || 3000}`);
 
+async function main() {
   const browser = await puppeteer.launch({
     headless: 'new',
     executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
