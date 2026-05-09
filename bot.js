@@ -158,6 +158,27 @@ async function startRoom(browser) {
   );
 
   try {
+    // Injecter le hook WebRTC AVANT toute navigation
+    await page.evaluateOnNewDocument(() => {
+      const hookedChannels = new WeakSet();
+      const origAEL = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, fn, opts) {
+        if (this instanceof RTCDataChannel && type === 'message' && typeof fn === 'function') {
+          if (!hookedChannels.has(this)) {
+            hookedChannels.add(this);
+            console.log('[LoveBot] ✓ DataChannel hooké (early)');
+          }
+          return origAEL.call(this, type, function(ev) {
+            if (window.__loveBotHandleChat) window.__loveBotHandleChat(ev.data);
+            return fn.call(this, ev);
+          }, opts);
+        }
+        return origAEL.call(this, type, fn, opts);
+      };
+    });
+
+    await page.exposeFunction('botBuildReply', buildReply);
+
     console.log(`[LoveBot] Navigation...`);
     await page.goto(ROOM, { waitUntil: 'networkidle2', timeout: 45000 });
     console.log(`[LoveBot] ✓ Page chargée`);
@@ -181,27 +202,6 @@ async function startRoom(browser) {
 
     const inputExists = await page.$('.input');
     console.log(`[LoveBot] .input trouvé : ${!!inputExists}`);
-
-    await page.exposeFunction('botBuildReply', buildReply);
-
-    // Injecter le hook WebRTC AVANT que la page crée ses connexions
-    await page.evaluateOnNewDocument(() => {
-      const hookedChannels = new WeakSet();
-      const origAEL = EventTarget.prototype.addEventListener;
-      EventTarget.prototype.addEventListener = function(type, fn, opts) {
-        if (this instanceof RTCDataChannel && type === 'message' && typeof fn === 'function') {
-          if (!hookedChannels.has(this)) {
-            hookedChannels.add(this);
-            console.log('[LoveBot] ✓ DataChannel hooké (early)');
-          }
-          return origAEL.call(this, type, function(ev) {
-            if (window.__loveBotHandleChat) window.__loveBotHandleChat(ev.data);
-            return fn.call(this, ev);
-          }, opts);
-        }
-        return origAEL.call(this, type, fn, opts);
-      };
-    });
 
     await page.evaluate(() => {
       const seen = new Set();
@@ -266,7 +266,7 @@ async function startRoom(browser) {
             if (node.nodeType !== 1) continue;
             const msgEl = node.matches?.('div.message') ? node : node.querySelector?.('div.message');
             if (!msgEl) continue;
-            const content = msgEl.querySelector('.span.content');
+            const content = msgEl.querySelector('span.content');
             if (!content) continue;
             handleChat(content.textContent.trim());
           }
@@ -316,12 +316,17 @@ server.listen(process.env.PORT || 3000, () => {
 async function main() {
   const browser = await puppeteer.launch({
     headless: 'new',
-    executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-software-rasterizer',
+      '--single-process',
+      '--no-zygote',
     ]
   });
 
@@ -330,8 +335,12 @@ async function main() {
     setTimeout(async () => {
       const newBrowser = await puppeteer.launch({
         headless: 'new',
-        executablePath: process.env.PUPPETEER_EXEC_PATH || undefined,
-        args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu']
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: [
+          '--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage',
+          '--disable-gpu','--disable-extensions','--disable-background-networking',
+          '--disable-software-rasterizer','--single-process','--no-zygote',
+        ]
       });
       newBrowser.on('disconnected', () => {
         console.log('[LoveBot] Browser crashé — redémarrage dans 15s');
